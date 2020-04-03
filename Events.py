@@ -53,7 +53,8 @@ class Events:
             while True:
                 time.sleep(0.5)
         except KeyboardInterrupt:
-            observer.stop()
-        observer.join()
+            self.kill_process()
+            # observer.stop()
+        # observer.join()
     
 # Events(['server.py'])  #执行server.py文件

@@ -8,21 +8,23 @@ class Http:
     set_cookies={} #设置请求cookie
     set_header={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36'} #请求头
     set_timeout=10 #超时 20秒
-    set_max_retries=2 #重试次数
+    set_max_retries=2 #重试次数 (实际请求3次)
     set_verify=False  #SSL 证书的验证 sll证书路径
     set_encoding="utf-8" #设置text输出编码
-    set_session=False #是否启用会话
+    set_session=True #是否启用会话
+
     get_header={} #响应头
     get_cookies={} #得到最后的响应cookie
     get_text='' #得到body响应内容
     get_content='' #得到二进制内容
     get_response='' #得到响应对象
     get_status_code=None #响应状态码
+    
     req=None
     def gettext(self):
         """得到响应text"""
         return self.get_text
-    def httpurl(self,url,method="GET",data=None,files=None):
+    def openurl(self,url,method="GET",data=None,files=None):
         """模拟浏览器请求
 
         url : 目标地址
@@ -34,36 +36,27 @@ class Http:
         if self.set_session:
             if self.req is None:
                 self.req = requests.Session()
+                self.req.mount('http://', requests.adapters.HTTPAdapter(max_retries=self.set_max_retries))
+                self.req.mount('https://', requests.adapters.HTTPAdapter(max_retries=self.set_max_retries))
         else:
             if self.req is None:
                 self.req = requests
-        self.req.mount('http://', requests.adapters.HTTPAdapter(max_retries=self.set_max_retries))
-        self.req.mount('https://', requests.adapters.HTTPAdapter(max_retries=self.set_max_retries))
         if self.set_cookies and isinstance(self.set_cookies,str):
             self.cookieserTdict()
-        # print(self.req_header)
-        try:
-            response=self.req.request(method, url,data=data,files=files,proxies=self.set_proxies,cookies=self.set_cookies,headers=self.set_header,timeout=self.set_timeout,verify=self.set_verify)
-        except Exception as e:
-            print(traceback.print_exc())
-            self.get_text=None
-            self.get_content=None
-            self.get_status_code=0
-        else:
-            response.encoding=self.set_encoding
-            self.get_header=dict(response.headers)
-            cookie=requests.utils.dict_from_cookiejar(response.cookies)
-            if self.get_cookies and cookie:
-                self.get_cookies=self.__merge(self.get_cookies,cookie)
-            elif cookie:
-                self.get_cookies=cookie
-            if self.set_cookies:
-                self.get_cookies=self.__merge(self.set_cookies,self.get_cookies)
-            self.get_text=response.text
-            self.get_content=response.content
-            self.get_response=response
-            self.get_status_code=int(response.status_code)
-            # print(self.req_header)
+        response=self.req.request(method, url,data=data,files=files,proxies=self.set_proxies,cookies=self.set_cookies,headers=self.set_header,timeout=self.set_timeout,verify=self.set_verify)
+        response.encoding=self.set_encoding
+        self.get_header=dict(response.headers)
+        cookie=requests.utils.dict_from_cookiejar(response.cookies)
+        if self.get_cookies and cookie:
+            self.get_cookies=self.__merge(self.get_cookies,cookie)
+        elif cookie:
+            self.get_cookies=cookie
+        if self.set_cookies:
+            self.get_cookies=self.__merge(self.set_cookies,self.get_cookies)
+        self.get_text=response.text
+        self.get_content=response.content
+        self.get_response=response
+        self.get_status_code=int(response.status_code)
     def __merge(self,dict1, dict2):
         "合并两个字典"
         C_dict = {}

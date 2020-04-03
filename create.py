@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os,re,traceback,shutil,platform,stat
+import os,re,traceback,shutil,platform,sys
 from mako.template import Template as kcwTemplate
 def Template(path,**context):
     body=''
@@ -62,15 +62,19 @@ class create:
         content=Template(self.path+"/application/__init__.py",appname=appname,tuple_modular=modulars)
         f.write(content)
         f.close()
-
+        if "Windows" in platform.platform():
+            pythonname="python"
+        else:
+            pythonname="python3"
+        sys.argv[0]=re.sub('.py','',sys.argv[0])
         content=('# #gunicorn -b 0.0.0.0:39010 '+self.appname+':app\n'+
                  'from kcweb import web\n'+
                  'import '+self.appname+' as application\n'+
                  'app=web(__name__,application)\n'+
                  'if __name__ == "__main__":\n'+
-                 '    #'+self.appname+' 是当前文件名  host监听ip port端口\n'+
-                 '    app.run("'+self.appname+'",host="0.0.0.0",port="39001")')
-        f=open("./"+self.appname+".py","w+",encoding='utf-8')
+                 '    #server 是当前文件名  host监听ip port端口 name python解释器名字 (windows一般是python  linux一般是python3)\n'+
+                 '    app.run("'+sys.argv[0]+'",host="0.0.0.0",port="39001",name="'+pythonname+'")')
+        f=open("./"+sys.argv[0]+".py","w+",encoding='utf-8')
         f.write(content)
         f.close()
     def zxmodular(self,sourcep):

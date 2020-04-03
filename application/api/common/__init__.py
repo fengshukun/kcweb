@@ -18,4 +18,4 @@ def del_session(name):
     "删除session"
     return session.rm("${appname}${modular}"+str(name))
 def tpl(path,**context):
-    return Template("/${modular}/tpl"+str(path),**context)
+    return Template("/${modular}/tpl/"+str(path),**context)

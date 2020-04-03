@@ -3,8 +3,8 @@
 app={}
 app['app_debug']=True  #是否开启调试模式
 app['tpl_folder']='./tpl'  #设置模板文件目录名 注意：不能配置目录路径
-app['before_request']='before_request'  #设置请求前执行的函数
-app['after_request']='after_request'    #设置请求后执行的函数  
+app['before_request']=''  #设置请求前执行的函数
+app['after_request']=''    #设置请求后执行的函数  
 app['staticpath']='static'
 # redis配置
 redis={}
@@ -71,13 +71,13 @@ mongo['retryWrites']=False #是否支持重新写入
 
 #路由配置
 route={}
-route['default']=True #是否开启默认路由  默认路由开启后面不影响以下配置的路由，模块名/版本名/控制器文件名/方法名 作为路由地址   如：http://www.kcw.com/api/v1/index/index/
-route['modular']=[{"www":"api"},{"127":"api"},{"192":"api"}] #配置域名模块 配置后地址为：http://www.kcw.com/v1/index/index/  注意:如果使用的是代理服务器需要把代理名称设置为当前配置的域名，否则不生效
-route['edition']='' #默认路由版本，配置后地址为 http://www.kcw.com/index/index/
+route['default']=True
+route['modular']=''
+route['edition']=''
 route['files']='index' #默认路由文件 
 route['funct']='index'  #默认路由函数
 route['methods']=['POST','GET'] #默认请求方式
-
+route['children']=[]
 #email配置
 email={}
 email['sender']='' #发件人邮箱账号
@@ -86,7 +86,17 @@ email['sendNick']='' #发件人昵称
 email['theme']='' #默认主题
 email['recNick']='' #默认收件人昵称
 
-
+kcweb={}
+kcweb['name']='kcweb'                             #项目的名称
+kcweb['version']='2.40.1'							#项目版本
+kcweb['description']='基于python后端开发框架'       #项目的简单描述
+kcweb['long_description']=''     #项目详细描述
+kcweb['license']='MIT'                    #开源协议   mit开源
+kcweb['url']='http://intapp.kwebapp.cn/index/index/doc/docde/1'
+kcweb['author']='禄可集团-坤坤'  					 #名字
+kcweb['author_email']='fk1402936534@qq.com' 	     #邮件地址
+kcweb['maintainer']='坤坤' 						 #维护人员的名字
+kcweb['maintainer_email']='fk1402936534@qq.com'    #维护人员的邮件地址
 
 #其他配置
 other={}

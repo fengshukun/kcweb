@@ -7,4 +7,4 @@ def inter():
         'title':'欢迎使用kcweb框架',
         'desc':'这是${appname}应用${modular}模块下v2版本的json输出效果'
     }
-    return returnjson(data)
+    return successjson(data)

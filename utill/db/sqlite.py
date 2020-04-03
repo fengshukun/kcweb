@@ -540,7 +540,7 @@ class sqlite:
             elif isinstance(self.__where,list):
                 self.__sql=self.__sql + " WHERE  %s" % self.__listTrans()
             else:
-                print("参数where类型错误")
+                print("参数where类型错误",type(self.__where),self.__where)
         if self.__order:
             s=''
             if isinstance(self.__order,list):

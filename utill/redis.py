@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from kcweb.utill import rediss as red
 from kcweb import config
+import json
 class redis:
     "redis  注意：连接池链接模式下不支持动态配置"
     __redisObj=None
@@ -20,6 +21,18 @@ class redis:
             else:
                 self.__redisObj=red.Redis(host=self.__config['host'],port=self.__config['port'],db=self.__config['db'])
             # print(self.__redisObj)
+    def json_decode(self,strs):
+        """json字符串转python类型"""
+        try:
+            return json.loads(strs)
+        except Exception:
+            return {}
+    def json_encode(self,strs):
+        """转成字符串"""
+        try:
+            return json.dumps(strs,ensure_ascii=False)
+        except Exception:
+            return ""
     def getconfig(self):
         return self.__config
     def connect(self,config):
@@ -63,6 +76,7 @@ class redis:
         if not ex and not px:
             if self.__config['ex']:
                 ex=self.__config['ex']
+        value=self.json_encode(value)
         return self.__redisObj.set(name, value, ex=ex, px=px, nx=nx, xx=xx)
     def get(self,name):
         """获取name的值
@@ -71,7 +85,16 @@ class redis:
         返回键“name”处的值，如果该键不存在，则返回“none”
         """
         self.__connects()
-        return self.__redisObj.get(name)
+        return self.json_decode(self.__redisObj.get(name))
+    def delete(self,name):
+        """删除name的值
+
+        name，键
+        
+        返回 True，如果该键不存在，则返回 0
+        """
+        self.__connects()
+        return self.__redisObj.delete(name)
     def rpush(self,name, *values):
         "元素从list的右边加入"
         self.__connects()

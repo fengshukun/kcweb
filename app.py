@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import socket,time,re,os,sys,traceback,threading
+import socket,time,re,os,sys,traceback,threading,urllib
 from . Events import Events
 from . common import *
 from . import config
@@ -30,7 +30,6 @@ class web:
                     env['BODY_DATA']=str(env['wsgi.input'].next(), encoding = "utf-8")
                 except:
                     env['BODY_DATA']=""
-
                 p=(config.app['staticpath']+env['RAW_URI'].replace(' ',''))
                 status='200 ok'
                 if os.path.isfile(p):
@@ -114,62 +113,152 @@ class web:
         
         port: 端口
 
-        name: python命令行解释机名字
+        name: python命令行解释机名字 默认python3
         """
         if self.__config.app['app_debug']:
             arg=sys.argv
             if len(arg)==2 and arg[1]=='eventlog':
-                self.__impl(host=host,port=port)
+                self.__impl(host=host,port=port,filename=filename)
             else:
                 Events([name,str(filename)+'.py','eventlog'])
         else:
-            self.__impl(host=host,port=port)
-    def __impl(self,host,port):
+            self.__impl(
+                host=host,
+                port=port,
+                filename=filename
+            )
+    def __impl(self,host,port,filename):
         "运行测试服务器"
-        print('! 警告：这是开发服务器。不要在生产环境中部署使用它')
-        print('* 生产环境中建议使用gunicorn')
         try:
-            self.__http_server(host=host,port=port)
+            self.__http_server(
+                host=host,
+                port=port,
+                filename=filename
+            )
         except KeyboardInterrupt:
             pass
+    def __get_modular(self,header):
+        "获取模块"
+        modular=''
+        route=self.__config.route
+        if route['modular']:
+            if isinstance(route['modular'],str):
+                modular=route['modular']
+            else:
+                HTTP_HOST=header['HTTP_HOST'].split(".")[0]
+                for mk in route['modular']:
+                    if HTTP_HOST in mk:
+                        modular=mk[HTTP_HOST]
+        return modular
+    def __getconfigroute(self,PATH_INFO,header):
+        "使用配置路由"
+        route=self.__config.route
+        routedefault=route['default']
+        methods=route['methods']
+        paths=''
+        for path in PATH_INFO:
+            paths+="/"+path
+        try:
+            for item in route['children']:
+                if ':' in item['path']:
+                    path=item['path'].split(':')
+                    if(len(path)==len(PATH_INFO)):
+                        is_pp=False
+                        try:
+                            item['methods']
+                        except:pass
+                        else:
+                            methods=item['methods']
+                        for k in methods: #匹配请求方式
+                            if header['REQUEST_METHOD'] in k:
+                                is_pp=True
+                                break
+                        if path[0]==paths[:len(path[0])] and is_pp:
+                            del PATH_INFO[0]
+                            cs=PATH_INFO
+                            PATH_INFO=item['component'].split('/')
+                            for v in cs:
+                                PATH_INFO.append(v)
+                            routedefault=True
+                            break
+                elif item['path']==paths or item['path']+'/'==paths:
+                    PATH_INFO=item['component'].split('/')
+                    routedefault=True
+                    break
+        except:pass
+        return routedefault,PATH_INFO
     def defaultroute(self,header,PATH_INFO):
         "路由匹配"
         route=self.__config.route
-        modular=''
-        edition='index'
-        files=route['files']
-        funct=route['funct']
+        modular=web.__get_modular(self,header)
+        routedefault=route['default']
+        methods=route['methods']
+        if routedefault:
+            edition='index'
+            files=route['files']
+            funct=route['funct']
+        else:
+            edition=''
+            files=''
+            funct=''
         param=[]
         urls=''
         i=0
         HTTP_HOST=header['HTTP_HOST'].split(".")[0]
         ##默认路由start #################################################################################
-        if route['modular']:
-            if isinstance(route['modular'],str):
-                modular=route['modular']
-            else:
-                for mk in route['modular']:
-                    if HTTP_HOST in mk:
-                        modular=mk[HTTP_HOST]
+        
         if modular:
-            if route['edition']:  #匹配版本并且匹配了模块
+            if route['edition']:  #匹配模块并且匹配了版本
                 edition=route['edition']
-                for path in PATH_INFO:
-                    if path:
-                        if i==0:
-                            files=path
-                            urls=urls+"/"+str(path)
-                        elif i==1:
-                            funct=path
-                            urls=urls+"/"+str(path)
-                        else:
-                            param.append(path)
-                    i+=1
+                routedefault,PATH_INFO=web.__getconfigroute(
+                    self,
+                    PATH_INFO,
+                    header
+                )
+                if routedefault: #使用路由
+                    for path in PATH_INFO:
+                        if path:
+                            if i==0:
+                                files=path
+                                urls=urls+"/"+str(path)
+                            elif i==1:
+                                funct=path
+                                urls=urls+"/"+str(path)
+                            else:
+                                param.append(urllib.parse.unquote(path))
+                        i+=1
             else:                  #配置模块没有配置版本
+                routedefault,PATH_INFO=web.__getconfigroute(
+                    self,
+                    PATH_INFO,
+                    header
+                )
+                if routedefault: #使用默认路由
+                    for path in PATH_INFO:
+                        if path:
+                            if i==0:
+                                edition=path
+                            elif i==1:
+                                files=path
+                                urls=urls+"/"+str(path)
+                            elif i==2:
+                                funct=path
+                                urls=urls+"/"+str(path)
+                            else:
+                                param.append(urllib.parse.unquote(path))
+                        i+=1
+        elif route['edition']:  #配置版本的但没有匹配模块
+            edition=route['edition']
+            routedefault,PATH_INFO=web.__getconfigroute(
+                self,
+                PATH_INFO,
+                header
+            )
+            if routedefault: #使用默认路由
                 for path in PATH_INFO:
                     if path:
                         if i==0:
-                            edition=path
+                            modular=path
                         elif i==1:
                             files=path
                             urls=urls+"/"+str(path)
@@ -177,24 +266,10 @@ class web:
                             funct=path
                             urls=urls+"/"+str(path)
                         else:
-                            param.append(path)
+                            param.append(urllib.parse.unquote(path))
                     i+=1
-        elif route['edition']:  #配置版本的但没有匹配模块
-            edition=route['edition']
-            for path in PATH_INFO:
-                if path:
-                    if i==0:
-                        modular=path
-                    elif i==1:
-                        files=path
-                        urls=urls+"/"+str(path)
-                    elif i==2:
-                        funct=path
-                        urls=urls+"/"+str(path)
-                    else:
-                        param.append(path)
-                i+=1
-        elif route['default']: #完全默认
+        else: #完全默认
+            routedefault,PATH_INFO=web.__getconfigroute(self,PATH_INFO,header)
             for path in PATH_INFO:
                 if path:
                     if i==0:
@@ -208,22 +283,9 @@ class web:
                         funct=path
                         urls=urls+"/"+str(path)
                     else:
-                        param.append(path)
+                        param.append(urllib.parse.unquote(path))
                 i+=1
         #默认路由end ############################################################
-
-        methods=route['methods']
-        
-        # #版本路由start ############################################################
-        # if edition in route:
-        #     if urls in route[edition]:
-        #         if isinstance(route[edition][urls],dict):
-        #             k=route[edition][urls]['route'].split('/')
-        #             files=k[0]
-        #             funct=k[1]
-        #             methods=route[edition][urls]['methods']
-        #     print(files,funct,route[edition]['index/index'])
-        # #版本路由end ############################################################
         return methods,modular,edition,files,funct,tuple(param)
     def __tran(self,data,status,resheader):
         "转换控制器返回的内容"
@@ -267,24 +329,30 @@ class web:
         body="这是一个http测试服务器"
         status="200 ok"
         resheader={"Content-Type":"text/html; charset=utf-8"}
-        # print(header)
         web.__set_globals(self,header)
         PATH_INFO=header['PATH_INFO'].split('/')
         del PATH_INFO[0]
         methods,modular,edition,files,funct,param=web.defaultroute(self,header,PATH_INFO)
         if header['REQUEST_METHOD'] in methods:
-            # print("映射文件：","%s/%s/%s/%s" % (modular,edition,files,funct))
             try:
                 obj=getattr(web.__appname,modular)
             except (AttributeError,UnboundLocalError):
                 status="500 Internal Server Error"
-                body=web.__tpl(title = status,e=status,data="无法找到目录："+str(modular)+"/")
+                body=web.__tpl(
+                    title = status,
+                    e=status,
+                    data="无法找到目录："+str(modular)+"/"
+                )
             else:
                 try:
                     obj=getattr(obj,"controller")
                 except (AttributeError,UnboundLocalError):
                     status="404 Not Found"
-                    body=web.__tpl(title = status,e=status,data="无法找到目录："+str(modular)+"/controller/")
+                    body=web.__tpl(
+                        title = status,
+                        e=status,
+                        data="无法找到目录："+str(modular)+"/controller/"
+                    )
                 else:
                     try:
                         obj=getattr(obj,edition)
@@ -292,17 +360,28 @@ class web:
                         con="无法找到目录："+str(modular)+"/controller/"+str(edition)+"/"
                         try:
                             data=getattr(obj,"error")(e,con)
-                            body,status,resheader=web.__tran(self,data,status,resheader)
+                            body,status,resheader=web.__tran(
+                                self,
+                                data,
+                                status,
+                                resheader
+                            )
                         except (AttributeError,UnboundLocalError):
                             status="404 Not Found"
-                            body=web.__tpl(title = status,e=status,data=con)
+                            body=web.__tpl(
+                                title = status,
+                                e=status,data=con
+                            )
                         except Exception as e:
                             status="500 Internal Server Error"
                             errms=status
                             if self.__config.app['app_debug']:
                                 print(traceback.format_exc())
                                 errms=traceback.format_exc().split("\n")
-                            body=web.__tpl(title = status,data=errms,e=e)
+                            body=web.__tpl(
+                                title = status,
+                                data=errms,e=e
+                            )
                     else:
                         try:
                             obj=getattr(obj,files)
@@ -310,17 +389,29 @@ class web:
                             con="无法找到文件："+str(modular)+"/controller/"+str(edition)+"/"+str(files)+".py"
                             try:
                                 data=getattr(obj,"error")(e,con)
-                                body,status,resheader=web.__tran(self,data,status,resheader)
+                                body,status,resheader=web.__tran(
+                                    self
+                                    ,data
+                                    ,status
+                                    ,resheader
+                                )
                             except (AttributeError,UnboundLocalError):
                                 status="404 Not Found"
-                                body=web.__tpl(title = status,data=con,e=status)
+                                body=web.__tpl(
+                                    title = status
+                                    ,data=con
+                                    ,e=status)
                             except Exception as e:
                                 status="500 Internal Server Error"
                                 errms=status
                                 if self.__config.app['app_debug']:
                                     print(traceback.format_exc())
                                     errms=traceback.format_exc().split("\n")
-                                body=web.__tpl(title = status,data=errms,e=e)
+                                body=web.__tpl(
+                                    title = status,
+                                    data=errms,
+                                    e=e
+                                )
                         else:
                             try:
                                 data=None
@@ -328,14 +419,22 @@ class web:
                                     try:
                                         data=getattr(obj,self.__config.app['before_request'])()
                                         if data:
-                                            body,status,resheader=web.__tran(self,data,status,resheader)
+                                            body,status,resheader=web.__tran(
+                                                self,data,
+                                                status,
+                                                resheader
+                                            )
                                     except (AttributeError):
                                         print(traceback.format_exc())
                                         pass
                                     except Exception as e:
                                         try:
                                             data=getattr(obj,"error")(e,traceback.format_exc().split("\n"))
-                                            body,status,resheader=web.__tran(self,data,status,resheader)
+                                            body,status,resheader=web.__tran(
+                                                self,data,
+                                                status,
+                                                resheader
+                                            )
                                         except (AttributeError):
                                             data=True
                                             status="500 Internal Server Error"
@@ -343,7 +442,10 @@ class web:
                                             if self.__config.app['app_debug']:
                                                 # print(traceback.format_exc())
                                                 errms=traceback.format_exc().split("\n")
-                                            body=web.__tpl(title = status,data=errms,e=e)
+                                            body=web.__tpl(
+                                                title = status,
+                                                data=errms,e=e
+                                            )
                                         except Exception as e:
                                             data=True
                                             status="500 Internal Server Error"
@@ -351,32 +453,54 @@ class web:
                                             if self.__config.app['app_debug']:
                                                 print(traceback.format_exc())
                                                 errms=traceback.format_exc().split("\n")
-                                            body=web.__tpl(title = status,data=errms,e=e)
+                                            body=web.__tpl(
+                                                title = status,
+                                                data=errms,e=e
+                                            )
                                 if not data:
-                                    
                                     data=getattr(obj,funct)(*param)
-                                    body,status,resheader=web.__tran(self,data,status,resheader)
+                                    body,status,resheader=web.__tran(
+                                        self,data,
+                                        status,
+                                        resheader
+                                    )
                             except Exception as e:
                                 try:
                                     data=getattr(obj,"error")(e,traceback.format_exc().split("\n"))
-                                    body,status,resheader=web.__tran(self,data,status,resheader)
+                                    body,status,resheader=web.__tran(
+                                        self,data,
+                                        status,
+                                        resheader
+                                    )
                                 except (AttributeError):
                                     status="500 Internal Server Error"
                                     errms=status
                                     if self.__config.app['app_debug']:
                                         print(traceback.format_exc())
                                         errms=traceback.format_exc().split("\n")
-                                    body=web.__tpl(title = status,data=errms,e=e)
+                                    body=web.__tpl(
+                                        title = status,
+                                        data=errms,
+                                        e=e
+                                    )
                                 except Exception as e:
                                     status="500 Internal Server Error"
                                     errms=status
                                     if self.__config.app['app_debug']:
                                         print(traceback.format_exc())
                                         errms=traceback.format_exc().split("\n")
-                                    body=web.__tpl(title = status,data=errms,e=e)
+                                    body=web.__tpl(
+                                        title = status,
+                                        data=errms,
+                                        e=e
+                                    )
         else:
             status="405 Method Not Allowed"
-            body=web.__tpl(title = status,data='405 Method Not Allowed',e='')
+            body=web.__tpl(
+                title = status,
+                data='405 Method Not Allowed',
+                e=''
+            )
         try:
             resheader['set-cookie']=globals.set_cookie
             del globals.set_cookie
@@ -391,22 +515,33 @@ class web:
             except Exception as e:
                 try:
                     data=getattr(obj,"error")(e,traceback.format_exc().split("\n"))
-                    body,status,resheader=web.__tran(self,data,status,resheader)
+                    body,status,resheader=web.__tran(
+                        self,data,
+                        status,
+                        resheader
+                    )
                 except AttributeError as e:
                     status="500 Internal Server Error"
                     errms=status
                     if self.__config.app['app_debug']:
                         print(traceback.format_exc())
                         errms=traceback.format_exc().split("\n")
-                    body=web.__tpl(title = status,data=errms,e=e)
+                    body=web.__tpl(
+                        title = status
+                        ,data=errms,
+                        e=e
+                    )
                 except Exception as e:
                     status="500 Internal Server Error"
                     errms=status
                     if self.__config.app['app_debug']:
                         print(traceback.format_exc())
                         errms=traceback.format_exc().split("\n")
-                    body=web.__tpl(title = status,data=errms,e="")
-        
+                    body=web.__tpl(
+                        title = status,
+                        data=errms,
+                        e=""
+                    )
         resheaders=[]
         for key in resheader:
             resheaders.append((key,resheader[key]))
@@ -424,29 +559,32 @@ class web:
             content=f.read()
             t=Template(content)
             body=t.render(**context)
-        # print(body)
         return body
     
     
-    def __http_server(self,host,port):
-        "使用多线程服务器来解决关于http请求体接收不完整"
-        if self.__config.app['app_debug']:
-            print('* 调试器：开启')
-        else:
-            print('* 调试器：已关闭')
-        print("* 运行在http://"+host+":"+str(port)+"/ （按CTRL+C退出）")
-        # globals.Gs.SERVER_HOST=socket.gethostbyname(socket.gethostname())
-        # print(globals.Gs.SERVER_HOST)
-        # kcwcache.cache().set_cache('43423adwfasfd3242',socket.gethostbyname(socket.gethostname()),0)
+    def __http_server(self,host,port,filename):
         tcp_socket=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        tcp_socket.bind((host,int(port)))
-        tcp_socket.listen(1024)
-        while True:
-            new_tcp_socket,client_info=tcp_socket.accept()
-            threading.Thread(target=self.__server_client,args=(new_tcp_socket,)).start()
-        tcp_socket.close()
+        try:
+            tcp_socket.bind((host,int(port)))
+        except OSError:
+            print("通常每个套接字地址(协议/网络地址/端口)只允许使用一次（按CTRL+C退出）")
+        else:
+            tcp_socket.listen(1024)
+            print('! 警告：这是开发服务器。不要在生产环境中部署使用它')
+            print('* 生产环境中建议使用gunicorn,gunicorn运行命令如：gunicorn -b '+host+':'+str(port)+' '+str(filename)+':app')
+            if self.__config.app['app_debug']:
+                print('* 调试器：开启')
+            else:
+                print('* 调试器：已关闭')
+            print("* 运行在http://"+host+":"+str(port)+"/ （按CTRL+C退出）")
+            while True:
+                new_tcp_socket,client_info=tcp_socket.accept()
+                t=threading.Thread(target=self.__server_client,args=(new_tcp_socket,))
+                t.daemon=True
+                t.start()
+            tcp_socket.close()
     def __server_client(self,new_socket):
-        # 处理http的的请求  ，linux系统上部分http请求体接收不全
+        # 处理http的的请求
         data=new_socket.recv(1047576).decode()
         if data:
             datas=data.split("\r\n")
@@ -533,7 +671,7 @@ class web:
                 new_socket.send(body)
             except Exception as e:
                 pass
-            new_socket.close() 
+        new_socket.close() 
     def __http_sever(self,host,port):
         #http测试服务器
         if self.__config.app['app_debug']:
